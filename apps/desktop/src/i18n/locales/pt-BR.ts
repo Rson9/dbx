@@ -495,6 +495,8 @@ export default withEnglishFallback({
     sshKeyPassphrasePlaceholder: "Deixe vazio se a chave não estiver criptografada",
     sshKeyPathBrowse: "Procurar",
     sshExposeLan: "Expor túnel à LAN",
+    sshAllowExecChannelProxy: "Permitir fallback de proxy pelo canal exec (nc)",
+    sshAllowExecChannelProxyDescription: "Ative apenas para hosts JumpServer/Koko confiáveis. Executa nc remotamente quando o encaminhamento TCP é negado.",
     sshConnectTimeout: "Timeout SSH (segundos)",
     sshHops: "Camadas de túnel SSH / proxy",
     sshHopAdd: "Adicionar camada SSH",

@@ -756,7 +756,13 @@ fn netcat_proxy_command(remote_host: &str, remote_port: u16) -> Result<String, S
 
 /// Accept connections on the local listener and forward them through the SSH session.
 /// Returns when the SSH session dies (listener error or session.is_closed()).
-async fn forward_loop(session: &Handle<SshClient>, listener: &TcpListener, remote_host: &str, remote_port: u16) {
+async fn forward_loop(
+    session: &Handle<SshClient>,
+    listener: &TcpListener,
+    remote_host: &str,
+    remote_port: u16,
+    allow_exec_channel_proxy: bool,
+) {
     let mut idle_check = tokio::time::interval(IDLE_SESSION_CHECK_INTERVAL);
     idle_check.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
@@ -806,7 +812,9 @@ async fn forward_loop(session: &Handle<SshClient>, listener: &TcpListener, remot
             .await
         {
             Ok(c) => c,
-            Err(russh::Error::ChannelOpenFailure(ChannelOpenFailure::AdministrativelyProhibited)) => {
+            Err(russh::Error::ChannelOpenFailure(ChannelOpenFailure::AdministrativelyProhibited))
+                if allow_exec_channel_proxy =>
+            {
                 // JumpServer/Koko deliberately disables SSH direct-tcpip even
                 // for a directly selected asset. An exec channel is still
                 // proxied to that asset, so use netcat there as a byte stream.
@@ -830,6 +838,10 @@ async fn forward_loop(session: &Handle<SshClient>, listener: &TcpListener, remot
                 }
                 log::info!("SSH direct-tcpip is disabled; forwarding through a remote nc session");
                 channel
+            }
+            Err(russh::Error::ChannelOpenFailure(ChannelOpenFailure::AdministrativelyProhibited)) => {
+                log::warn!("SSH direct-tcpip was administratively prohibited; exec-channel proxy fallback is disabled");
+                break;
             }
             Err(e) => {
                 log::error!("SSH direct-tcpip failed: {e}");
@@ -870,11 +882,12 @@ async fn tunnel_reconnect_loop(
     listener: TcpListener,
     remote_host: String,
     remote_port: u16,
+    allow_exec_channel_proxy: bool,
 ) {
     loop {
         log::info!("SSH tunnel active: {}:{} -> {}:{}", connect_host, connect_port, remote_host, remote_port);
 
-        forward_loop(&session, &listener, &remote_host, remote_port).await;
+        forward_loop(&session, &listener, &remote_host, remote_port, allow_exec_channel_proxy).await;
 
         log::warn!("SSH tunnel connection lost ({}:{}), reconnecting...", connect_host, connect_port);
 
@@ -998,6 +1011,7 @@ impl TunnelManager {
         remote_host: &str,
         remote_port: u16,
         expose_to_lan: bool,
+        allow_exec_channel_proxy: bool,
     ) -> Result<u16, String> {
         {
             let mut tunnels = self.tunnels.lock().await;
@@ -1033,6 +1047,7 @@ impl TunnelManager {
             remote_host,
             remote_port,
             expose_to_lan,
+            allow_exec_channel_proxy,
         )
         .await?;
 
@@ -1107,6 +1122,7 @@ impl TunnelManager {
                 &target_host,
                 target_port,
                 is_last && hop.expose_lan,
+                hop.allow_exec_channel_proxy,
             )
             .await
             .map_err(|err| format!("SSH hop {} failed: {err}", index + 1))?;
@@ -1182,6 +1198,7 @@ async fn spawn_tunnel(
     remote_host: &str,
     remote_port: u16,
     expose_to_lan: bool,
+    allow_exec_channel_proxy: bool,
 ) -> Result<(JoinHandle<()>, u16), String> {
     let local_port = portpicker::pick_unused_port().ok_or("No available port")?;
 
@@ -1225,6 +1242,7 @@ async fn spawn_tunnel(
         listener,
         remote_host.to_string(),
         remote_port,
+        allow_exec_channel_proxy,
     ));
 
     Ok((handle, local_port))
@@ -1353,6 +1371,7 @@ mod tests {
             use_ssh_agent: false,
             ssh_agent_sock_path: String::new(),
             auth_method: "password".to_string(),
+            allow_exec_channel_proxy: false,
         }
     }
 
@@ -1968,6 +1987,7 @@ uveF/dLmnVN1IriEyEvHAAAACGRieC10ZXN0AQIDBAU=
                 "db.internal",
                 5432,
                 false,
+                true,
             )
             .await
             .expect("start fallback tunnel");
@@ -1983,6 +2003,56 @@ uveF/dLmnVN1IriEyEvHAAAACGRieC10ZXN0AQIDBAU=
         assert_eq!(&*command.lock().unwrap(), b"exec nc 'db.internal' 5432");
 
         manager.stop_tunnel("netcat-fallback").await;
+        server_task.abort();
+    }
+
+    #[tokio::test]
+    async fn prohibited_direct_tcpip_does_not_run_netcat_by_default() {
+        let _guard = PROMPT_TEST_LOCK.lock().await;
+        ssh_prompt::clear_ssh_prompt_gateway();
+        let server_key = decode_secret_key(TEST_SERVER_KEY_PEM, None).expect("decode test server key");
+        let server_config = server::Config { keys: vec![server_key], ..Default::default() };
+        let port = portpicker::pick_unused_port().expect("no free port");
+        let command = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let mut server = NetcatFallbackServer { command: command.clone() };
+        let server_task = tokio::spawn(async move {
+            let _ = server.run_on_address(Arc::new(server_config), ("127.0.0.1", port)).await;
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+        let dir = tempdir().unwrap();
+        let known_hosts_path = dir.path().join("known_hosts");
+        HostKeyVerifier::new(known_hosts_path.clone()).learn("127.0.0.1", port, &test_server_public_key()).unwrap();
+        let manager = TunnelManager::new(dir.path().to_path_buf());
+        let local_port = manager
+            .start_tunnel(
+                "netcat-disabled-by-default",
+                "127.0.0.1",
+                port,
+                "127.0.0.1",
+                port,
+                "user",
+                "",
+                "",
+                "",
+                false,
+                "",
+                "none",
+                5,
+                "db.internal",
+                5432,
+                false,
+                false,
+            )
+            .await
+            .expect("start tunnel");
+
+        let mut client = TcpStream::connect(("127.0.0.1", local_port)).await.unwrap();
+        let _ = client.write_all(b"ping").await;
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        assert!(command.lock().unwrap().is_empty(), "generic SSH server must not receive an nc command by default");
+
+        manager.stop_tunnel("netcat-disabled-by-default").await;
         server_task.abort();
     }
 
@@ -2066,6 +2136,7 @@ uveF/dLmnVN1IriEyEvHAAAACGRieC10ZXN0AQIDBAU=
             "db.internal",
             5432,
             false,
+            false,
         );
         let second = manager.start_tunnel(
             "shared-layer",
@@ -2083,6 +2154,7 @@ uveF/dLmnVN1IriEyEvHAAAACGRieC10ZXN0AQIDBAU=
             5,
             "db.internal",
             5432,
+            false,
             false,
         );
         let (first_port, second_port) = tokio::join!(first, second);

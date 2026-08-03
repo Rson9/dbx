@@ -494,6 +494,8 @@ export default withEnglishFallback({
     sshKeyPassphrasePlaceholder: "金鑰未加密則留空",
     sshKeyPathBrowse: "瀏覽",
     sshExposeLan: "允許區域網路存取隧道",
+    sshAllowExecChannelProxy: "允許透過執行通道回退代理（nc）",
+    sshAllowExecChannelProxyDescription: "僅對可信的 JumpServer/Koko 主機啟用。TCP 轉送被拒絕時會在遠端執行 nc。",
     sshConnectTimeout: "SSH 逾時時間（秒）",
     sshHops: "SSH 隧道/代理層級",
     sshHopAdd: "新增 SSH 層",

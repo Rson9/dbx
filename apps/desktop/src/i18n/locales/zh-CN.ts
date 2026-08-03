@@ -627,6 +627,8 @@ export default withEnglishFallback({
     sshKeyPassphrasePlaceholder: "密钥未加密则留空",
     sshKeyPathBrowse: "浏览",
     sshExposeLan: "允许局域网访问隧道",
+    sshAllowExecChannelProxy: "允许通过执行通道回退代理（nc）",
+    sshAllowExecChannelProxyDescription: "仅对可信的 JumpServer/Koko 主机启用。TCP 转发被拒绝时会在远端执行 nc。",
     sshConnectTimeout: "SSH 超时时间（秒）",
     sshHops: "隧道/代理层级",
     sshHopAdd: "添加 SSH 层",

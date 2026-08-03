@@ -623,6 +623,8 @@ export default {
     sshKeyPassphrasePlaceholder: "Leave empty if key is not encrypted",
     sshKeyPathBrowse: "Browse",
     sshExposeLan: "Expose tunnel to LAN",
+    sshAllowExecChannelProxy: "Allow exec-channel proxy fallback (nc)",
+    sshAllowExecChannelProxyDescription: "Only enable this for trusted JumpServer/Koko hosts. It runs nc remotely when TCP forwarding is denied.",
     sshConnectTimeout: "SSH Timeout (seconds)",
     sshHops: "Tunnel / Proxy Layers",
     sshHopAdd: "Add SSH layer",

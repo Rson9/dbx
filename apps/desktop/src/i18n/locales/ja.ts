@@ -488,6 +488,8 @@ export default withEnglishFallback({
     sshKeyPassphrasePlaceholder: "鍵が暗号化されていない場合は空のまま",
     sshKeyPathBrowse: "参照",
     sshExposeLan: "トンネルをLANに公開",
+    sshAllowExecChannelProxy: "実行チャネルのプロキシフォールバック（nc）を許可",
+    sshAllowExecChannelProxyDescription: "信頼できる JumpServer/Koko ホストでのみ有効にしてください。TCP 転送が拒否された場合、リモートで nc を実行します。",
     sshConnectTimeout: "SSHタイムアウト（秒）",
     sshHops: "SSHトンネル / プロキシ階層",
     sshHopAdd: "SSH階層を追加",

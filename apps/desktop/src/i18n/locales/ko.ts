@@ -610,6 +610,8 @@ export default withEnglishFallback({
     sshKeyPassphrasePlaceholder: "키가 암호화되지 않은 경우 비워 두세요",
     sshKeyPathBrowse: "찾아보기",
     sshExposeLan: "터널을 LAN에 노출",
+    sshAllowExecChannelProxy: "exec 채널 프록시 대체(nc) 허용",
+    sshAllowExecChannelProxyDescription: "신뢰할 수 있는 JumpServer/Koko 호스트에서만 사용하세요. TCP 전달이 거부되면 원격에서 nc를 실행합니다.",
     sshConnectTimeout: "SSH 제한 시간 (초)",
     sshHops: "터널 / 프록시 계층",
     sshHopAdd: "SSH 계층 추가",
