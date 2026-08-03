@@ -1,6 +1,9 @@
 use mongodb::{
     bson::{doc, oid::ObjectId, Bson, DateTime, Document},
-    options::{ClientOptions, GridFsBucketOptions, IndexOptions, UpdateModifications},
+    options::{
+        ClientOptions, DatabaseOptions, GridFsBucketOptions, IndexOptions, ReadPreference, SelectionCriteria,
+        UpdateModifications,
+    },
     Client, Cursor, Database, IndexModel,
 };
 use serde::{Deserialize, Serialize};
@@ -202,7 +205,40 @@ fn collection_stats_field(result: &Document, key: &str) -> serde_json::Value {
 }
 
 pub async fn list_databases(client: &Client) -> Result<Vec<String>, String> {
-    client.list_database_names().await.map_err(|e| e.to_string())
+    match client.list_database_names().await {
+        Ok(databases) => Ok(databases),
+        Err(error) if list_databases_requires_secondary_fallback(&error.to_string()) => {
+            let admin = client.database_with_options(
+                "admin",
+                DatabaseOptions::builder()
+                    .selection_criteria(SelectionCriteria::ReadPreference(ReadPreference::SecondaryPreferred {
+                        options: None,
+                    }))
+                    .build(),
+            );
+            let result = admin
+                .run_command(doc! { "listDatabases": 1, "nameOnly": true })
+                .await
+                .map_err(|fallback| fallback.to_string())?;
+            let databases = result
+                .get_array("databases")
+                .map_err(|error| format!("MongoDB listDatabases response is invalid: {error}"))?
+                .iter()
+                .filter_map(|database| database.as_document()?.get_str("name").ok().map(str::to_string))
+                .collect();
+            Ok(databases)
+        }
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+fn list_databases_requires_secondary_fallback(error: &str) -> bool {
+    let error = error.to_ascii_lowercase();
+    error.contains("not master")
+        || error.contains("not primary")
+        || error.contains("notmaster")
+        || error.contains("notwritableprimary")
+        || error.contains("slaveok=false")
 }
 
 /// MongoDB collection kind from `listCollections` (not GridFS buckets).
@@ -2099,6 +2135,13 @@ mod tests {
     fn mongo_find_count_success_preserves_count_semantics() {
         assert_eq!(resolve_mongo_find_total(Ok(250), true, 100, 25), (250, true));
         assert_eq!(resolve_mongo_find_total(Ok(250), false, 100, 25), (250, false));
+    }
+
+    #[test]
+    fn detects_mongo_secondary_only_list_databases_errors() {
+        assert!(list_databases_requires_secondary_fallback("NotWritablePrimary: not master"));
+        assert!(list_databases_requires_secondary_fallback("not master and slaveOk=false"));
+        assert!(!list_databases_requires_secondary_fallback("Unauthorized: listDatabases"));
     }
 
     #[test]

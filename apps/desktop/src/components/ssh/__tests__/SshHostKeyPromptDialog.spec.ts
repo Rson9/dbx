@@ -217,4 +217,44 @@ describe("SshHostKeyPromptDialog web bridge", () => {
     eventSource?.error();
     expect(setSpy).toHaveBeenCalledTimes(2);
   });
+
+  it("submits a keyboard-interactive TOTP challenge as a secret response", async () => {
+    await mountDialog();
+
+    const eventSource = MockEventSource.instances[0];
+    eventSource?.emit({
+      type: "prompt",
+      request: {
+        id: "totp-1",
+        kind: "SecretInput",
+        host: "jump.example.test",
+        port: 2222,
+        prompt: "JumpServer\n\nOTP Code:",
+        echo: false,
+      },
+    });
+    await nextTick();
+
+    expect(document.body.textContent).toContain("SSH Verification Required");
+    expect(document.body.textContent).toContain("OTP Code:");
+
+    const input = document.body.querySelector<HTMLInputElement>("input");
+    expect(input?.type).toBe("password");
+    if (!input) throw new Error("TOTP input was not rendered");
+    input.value = "123456";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    await nextTick();
+
+    const buttons = document.body.querySelectorAll<HTMLButtonElement>("button");
+    buttons.item(buttons.length - 1).click();
+
+    await vi.waitFor(() => {
+      expect(resolveSshPromptMock).toHaveBeenCalledWith({
+        id: "totp-1",
+        action: "secret",
+        remember: undefined,
+        secret: "123456",
+      });
+    });
+  });
 });
