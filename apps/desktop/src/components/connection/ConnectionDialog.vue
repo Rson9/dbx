@@ -6983,7 +6983,6 @@ function openExternalUrl(url: string) {
                         <span class="text-xs text-muted-foreground">{{ t("connection.sshAllowExecChannelProxy") }}</span>
                       </label>
                     </div>
-                    <p class="col-span-3 col-start-2 -mt-3 text-xs text-muted-foreground">{{ t("connection.sshAllowExecChannelProxyDescription") }}</p>
                     <div class="grid grid-cols-4 items-center gap-4">
                       <Label :class="connectionLabelSmallClass">{{ t("connection.sshConnectTimeout") }}</Label>
                       <Input v-model.number="selectedSshLayer.connect_timeout_secs" type="number" min="1" max="300" step="1" class="col-span-3" :disabled="selectedSshLayer.enabled === false" />
