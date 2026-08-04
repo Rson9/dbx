@@ -237,8 +237,8 @@ function submitSecret() {
 </script>
 
 <template>
-  <Dialog v-model:open="visible" :dismissible="false">
-    <DialogContent class="sm:max-w-[460px]">
+  <Dialog v-model:open="visible">
+    <DialogContent class="sm:max-w-[460px]" :show-close-button="false" @interact-outside.prevent @escape-key-down.prevent>
       <DialogHeader>
         <DialogTitle>
           {{ t(isSecretPrompt ? "connection.sshInteractiveTitle" : "connection.sshHostKeyVerifyTitle") }}

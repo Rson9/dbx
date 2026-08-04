@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { createApp, defineComponent, h, nextTick, type App } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
@@ -48,6 +50,8 @@ vi.mock("@/components/ui/button", async () => {
 });
 
 import SshHostKeyPromptDialog from "@/components/ssh/SshHostKeyPromptDialog.vue";
+
+const dialogSource = readFileSync(resolve(process.cwd(), "apps/desktop/src/components/ssh/SshHostKeyPromptDialog.vue"), "utf8");
 
 class MockEventSource {
   static instances: MockEventSource[] = [];
@@ -113,6 +117,13 @@ async function mountDialog() {
 }
 
 describe("SshHostKeyPromptDialog web bridge", () => {
+  it("requires an explicit answer for blocking SSH prompts", () => {
+    expect(dialogSource).toContain(':show-close-button="false"');
+    expect(dialogSource).toContain("@interact-outside.prevent");
+    expect(dialogSource).toContain("@escape-key-down.prevent");
+    expect(dialogSource).not.toContain(':dismissible="false"');
+  });
+
   it("shows an SSE host-key prompt and posts the user's acceptance", async () => {
     await mountDialog();
 
