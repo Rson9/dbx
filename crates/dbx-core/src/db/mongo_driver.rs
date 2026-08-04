@@ -1,8 +1,8 @@
 use mongodb::{
     bson::{doc, oid::ObjectId, Bson, DateTime, Document},
     options::{
-        ClientOptions, Collation, DatabaseOptions, GridFsBucketOptions, IndexOptions, ReadPreference,
-        SelectionCriteria, UpdateModifications,
+        ClientOptions, Collation, GridFsBucketOptions, IndexOptions, ReadPreference, SelectionCriteria,
+        UpdateModifications,
     },
     Client, Cursor, Database, IndexModel,
 };
@@ -220,16 +220,10 @@ pub async fn list_databases(client: &Client) -> Result<Vec<String>, String> {
     match client.list_database_names().await {
         Ok(databases) => Ok(databases),
         Err(error) if list_databases_requires_secondary_fallback(&error.to_string()) => {
-            let admin = client.database_with_options(
-                "admin",
-                DatabaseOptions::builder()
-                    .selection_criteria(SelectionCriteria::ReadPreference(ReadPreference::SecondaryPreferred {
-                        options: None,
-                    }))
-                    .build(),
-            );
-            let result = admin
+            let result = client
+                .database("admin")
                 .run_command(doc! { "listDatabases": 1, "nameOnly": true })
+                .selection_criteria(list_databases_secondary_selection())
                 .await
                 .map_err(|fallback| fallback.to_string())?;
             let databases = result
@@ -242,6 +236,10 @@ pub async fn list_databases(client: &Client) -> Result<Vec<String>, String> {
         }
         Err(error) => Err(error.to_string()),
     }
+}
+
+fn list_databases_secondary_selection() -> SelectionCriteria {
+    SelectionCriteria::ReadPreference(ReadPreference::SecondaryPreferred { options: None })
 }
 
 fn list_databases_requires_secondary_fallback(error: &str) -> bool {
@@ -2220,6 +2218,14 @@ mod tests {
         assert!(list_databases_requires_secondary_fallback("NotWritablePrimary: not master"));
         assert!(list_databases_requires_secondary_fallback("not master and slaveOk=false"));
         assert!(!list_databases_requires_secondary_fallback("Unauthorized: listDatabases"));
+    }
+
+    #[test]
+    fn list_databases_fallback_selects_secondary_preferred() {
+        assert!(matches!(
+            list_databases_secondary_selection(),
+            SelectionCriteria::ReadPreference(ReadPreference::SecondaryPreferred { .. })
+        ));
     }
 
     #[test]
